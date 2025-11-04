@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trip Manager - Firebase Realtime DB</title>
+    <title>Trip Manager Pro - Complete Edition</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -12,26 +12,19 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
     <style>
-        /* Custom scrollbar for better UI */
-        .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
+        .overflow-y-auto::-webkit-scrollbar { width: 8px; }
+        .overflow-y-auto::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .overflow-y-auto::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover { background: #555; }
+        @media print { 
+            .no-print { display: none !important; }
+            body { background: white; }
+            .print-page-break { page-break-after: always; }
         }
-        .overflow-y-auto::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-            background: #555;
-            border-radius: 10px;
-        }
-        @media print {
-            .no-print {
-                display: none !important;
-            }
+        .category-bar {
+            height: 20px;
+            border-radius: 4px;
+            transition: width 0.3s ease;
         }
     </style>
 </head>
@@ -41,11 +34,29 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // 🛑 1. FIREBASE CONFIGURATION 🛑
+        // Currency conversion rates (base: INR)
+        const CURRENCY_RATES = {
+            'INR': 1,
+            'USD': 83.12,
+            'EUR': 90.45,
+            'GBP': 105.23,
+            'AED': 22.63,
+            'SGD': 61.84
+        };
+
+        const EXPENSE_CATEGORIES = [
+            'Accommodation',
+            'Food & Dining',
+            'Transportation',
+            'Activities',
+            'Shopping',
+            'Other'
+        ];
+
         const firebaseConfig = {
             apiKey: "AIzaSyB5hybGUq4ZhGQJeTW-Rha9hMj8hF6ohR0",
             authDomain: "trip-2611b.firebaseapp.com",
-            databaseURL: "https://trip-2611b-default-rtdb.firebaseio.com", // Ensure this is correct
+            databaseURL: "https://trip-2611b-default-rtdb.firebaseio.com",
             projectId: "trip-2611b",
             storageBucket: "trip-2611b.firebasestorage.app",
             messagingSenderId: "429060121850",
@@ -53,28 +64,19 @@
             measurementId: "G-1ENGW43YXT"
         };
 
-        // Initialize Firebase App
         const app = firebase.initializeApp(firebaseConfig);
+        const db = app.database();
         
-        // 🛠️ RTDB CHANGE 1: Initialize the Realtime Database
-        const db = app.database(); 
+        // Enable offline persistence
+        db.goOffline();
+        db.goOnline();
         
-        // 🛠️ RTDB CHANGE 2: Define Realtime Database references (path to the data)
         const travelersRef = db.ref("travelers");
         const expensesRef = db.ref("expenses");
-        
-        // Initial Data (only used if Firebase collections are empty)
-        const initialTravelers = [
-            { id: 't1', name: 'John Doe', transport: 'Plane', arrival: 'Nov 26', departure: 'Nov 30', status: 'Confirmed' },
-            { id: 't2', name: 'Jane Smith', transport: 'Train', arrival: 'Nov 27', departure: 'Dec 01', status: 'Confirmed' },
-            // ... (rest of initial travelers)
-        ];
-        const initialExpenses = [
-            { id: 'e1', date: 'Nov 25', description: 'Accommodation Deposit', amount: 6000, splitType: 'Equal', paidBy: 'Sarah Lee', status: 'Confirmed' },
-            // ... (rest of initial expenses)
-        ];
+        const settlementsRef = db.ref("settlements");
+        const tripSettingsRef = db.ref("tripSettings");
+        const recurringTemplatesRef = db.ref("recurringTemplates");
 
-        // Helper to format date for input defaults (remains the same)
         const getFormattedDate = (date) => {
             const d = date ? new Date(date) : new Date();
             const month = d.toLocaleString('en-US', { month: 'short' });
@@ -82,60 +84,105 @@
             return `${month} ${day}`;
         };
 
+        const getFullDate = (date) => {
+            const d = date ? new Date(date) : new Date();
+            return d.toISOString().split('T')[0];
+        };
+
+        // Convert amount to INR (base currency)
+        const convertToINR = (amount, currency) => {
+            return amount * (CURRENCY_RATES[currency] || 1);
+        };
+
+        // Convert INR to target currency
+        const convertFromINR = (amountINR, targetCurrency) => {
+            return amountINR / (CURRENCY_RATES[targetCurrency] || 1);
+        };
+
         const App = () => {
             const [activeTab, setActiveTab] = useState('travelers');
             const [travelers, setTravelers] = useState([]);
             const [expenses, setExpenses] = useState([]);
+            const [settlements, setSettlements] = useState([]);
+            const [recurringTemplates, setRecurringTemplates] = useState([]);
+            const [tripSettings, setTripSettings] = useState({
+                tripName: 'My Trip',
+                baseCurrency: 'INR',
+                startDate: getFullDate(),
+                endDate: getFullDate(new Date(Date.now() + 5*24*60*60*1000))
+            });
             const [loading, setLoading] = useState(true);
+            const [isOffline, setIsOffline] = useState(false);
 
-            // 🛠️ RTDB CHANGE 3: Realtime Data Fetch (replaces onSnapshot)
             useEffect(() => {
+                // Monitor connection state
+                const connectedRef = db.ref('.info/connected');
+                connectedRef.on('value', (snap) => {
+                    setIsOffline(!snap.val());
+                });
+
                 const travelersListener = travelersRef.on('value', snapshot => {
                     const travelerObject = snapshot.val() || {};
-                    // RTDB returns an object, we convert it to an array, using the key as the ID
                     const travelerData = Object.entries(travelerObject).map(([key, value]) => ({ 
                         ...value, 
                         id: key 
                     }));
                     setTravelers(travelerData);
                     setLoading(false);
-                }, error => {
-                    console.error("Error fetching travelers:", error);
-                    setLoading(false);
                 });
 
                 const expensesListener = expensesRef.on('value', snapshot => {
                     const expenseObject = snapshot.val() || {};
-                    // Convert RTDB object to an array
                     const expenseData = Object.entries(expenseObject).map(([key, value]) => ({ 
                         ...value, 
                         id: key 
                     }));
                     setExpenses(expenseData);
-                    setLoading(false);
-                }, error => {
-                    console.error("Error fetching expenses:", error);
-                    setLoading(false);
                 });
 
-                // Cleanup subscription on component unmount (using RTDB .off())
+                const settlementsListener = settlementsRef.on('value', snapshot => {
+                    const settlementObject = snapshot.val() || {};
+                    const settlementData = Object.entries(settlementObject).map(([key, value]) => ({ 
+                        ...value, 
+                        id: key 
+                    }));
+                    setSettlements(settlementData);
+                });
+
+                const tripSettingsListener = tripSettingsRef.on('value', snapshot => {
+                    const settings = snapshot.val();
+                    if (settings) {
+                        setTripSettings(settings);
+                    }
+                });
+
+                const recurringListener = recurringTemplatesRef.on('value', snapshot => {
+                    const templateObject = snapshot.val() || {};
+                    const templateData = Object.entries(templateObject).map(([key, value]) => ({ 
+                        ...value, 
+                        id: key 
+                    }));
+                    setRecurringTemplates(templateData);
+                });
+
                 return () => {
                     travelersRef.off('value', travelersListener);
                     expensesRef.off('value', expensesListener);
+                    settlementsRef.off('value', settlementsListener);
+                    tripSettingsRef.off('value', tripSettingsListener);
+                    recurringTemplatesRef.off('value', recurringListener);
+                    connectedRef.off();
                 };
             }, []);
             
             if (loading) {
-                return <div className="p-10 text-center text-xl font-semibold text-gray-600">Loading trip data from Firebase Realtime Database...</div>;
+                return <div className="p-10 text-center text-xl font-semibold text-gray-600">Loading trip data...</div>;
             }
             
-            // 🛠️ RTDB CHANGE 4: Realtime Database CRUD Operations (replaces Firestore functions)
-            
-            // Traveler Handlers
+            // CRUD Operations
             const addTraveler = async (newTraveler) => {
                 try {
-                    // RTDB: .push() is used to add data with a unique, automatically generated ID
-                    await travelersRef.push(newTraveler); 
+                    await travelersRef.push(newTraveler);
                 } catch (e) {
                     console.error("Error adding traveler: ", e);
                 }
@@ -143,8 +190,7 @@
 
             const deleteTraveler = async (id) => {
                 try {
-                    // RTDB: .child(id).remove() deletes the node at that path
-                    await travelersRef.child(id).remove(); 
+                    await travelersRef.child(id).remove();
                 } catch (e) {
                     console.error("Error deleting traveler: ", e);
                 }
@@ -152,18 +198,15 @@
 
             const updateTravelerStatus = async (id, newStatus) => {
                 try {
-                    // RTDB: .child(id).update() updates specific properties of the node
-                    await travelersRef.child(id).update({ status: newStatus }); 
+                    await travelersRef.child(id).update({ status: newStatus });
                 } catch (e) {
                     console.error("Error updating traveler: ", e);
                 }
             };
 
-            // Expense Handlers
             const addExpense = async (newExpense) => {
                 try {
-                    // RTDB: .push() is used to add data with a unique, automatically generated ID
-                    await expensesRef.push(newExpense); 
+                    await expensesRef.push(newExpense);
                 } catch (e) {
                     console.error("Error adding expense: ", e);
                 }
@@ -171,14 +214,52 @@
 
             const deleteExpense = async (id) => {
                 try {
-                    // RTDB: .child(id).remove() deletes the node at that path
-                    await expensesRef.child(id).remove(); 
+                    await expensesRef.child(id).remove();
                 } catch (e) {
                     console.error("Error deleting expense: ", e);
                 }
             };
-            
-            // --- ALL OTHER COMPONENTS GO HERE (UNCHANGED LOGIC) ---
+
+            const addSettlement = async (newSettlement) => {
+                try {
+                    await settlementsRef.push(newSettlement);
+                } catch (e) {
+                    console.error("Error adding settlement: ", e);
+                }
+            };
+
+            const deleteSettlement = async (id) => {
+                try {
+                    await settlementsRef.child(id).remove();
+                } catch (e) {
+                    console.error("Error deleting settlement: ", e);
+                }
+            };
+
+            const updateTripSettings = async (settings) => {
+                try {
+                    await tripSettingsRef.set(settings);
+                    setTripSettings(settings);
+                } catch (e) {
+                    console.error("Error updating settings: ", e);
+                }
+            };
+
+            const addRecurringTemplate = async (template) => {
+                try {
+                    await recurringTemplatesRef.push(template);
+                } catch (e) {
+                    console.error("Error adding template: ", e);
+                }
+            };
+
+            const deleteRecurringTemplate = async (id) => {
+                try {
+                    await recurringTemplatesRef.child(id).remove();
+                } catch (e) {
+                    console.error("Error deleting template: ", e);
+                }
+            };
 
             const getStatusColor = (status) => {
                 switch (status) {
@@ -189,8 +270,20 @@
                 }
             };
 
-            // Expense Split Logic (Same as before)
-            const calculateBalances = (confirmedTravelers, confirmedExpenses) => {
+            const getCategoryColor = (category) => {
+                const colors = {
+                    'Accommodation': 'bg-blue-500',
+                    'Food & Dining': 'bg-green-500',
+                    'Transportation': 'bg-yellow-500',
+                    'Activities': 'bg-purple-500',
+                    'Shopping': 'bg-pink-500',
+                    'Other': 'bg-gray-500'
+                };
+                return colors[category] || 'bg-gray-500';
+            };
+
+            // Enhanced balance calculation with custom splits
+            const calculateBalances = (confirmedTravelers, confirmedExpenses, confirmedSettlements) => {
                 const balances = {};
                 confirmedTravelers.forEach(t => balances[t.name] = 0);
                 const totalShares = {};
@@ -198,27 +291,47 @@
 
                 confirmedExpenses.forEach(expense => {
                     const payerName = expense.paidBy;
-                    if (!balances.hasOwnProperty(payerName)) return; 
+                    if (!balances.hasOwnProperty(payerName)) return;
                     
-                    balances[payerName] += expense.amount;
+                    // Convert to base currency (INR) for calculation
+                    const amountINR = convertToINR(expense.amount, expense.currency || 'INR');
+                    balances[payerName] += amountINR;
                     
                     if (expense.splitType === 'Equal') {
                         const totalParticipants = confirmedTravelers.length;
-                        const perShare = expense.amount / totalParticipants;
+                        const perShare = amountINR / totalParticipants;
                         
                         confirmedTravelers.forEach(t => {
                             balances[t.name] -= perShare;
                             totalShares[t.name] += perShare;
                         });
+                    } else if (expense.splitType === 'Custom' && expense.customSplits) {
+                        // Custom split handling
+                        Object.entries(expense.customSplits).forEach(([name, share]) => {
+                            if (balances.hasOwnProperty(name)) {
+                                const shareAmount = parseFloat(share) || 0;
+                                balances[name] -= shareAmount;
+                                totalShares[name] += shareAmount;
+                            }
+                        });
+                    }
+                });
+
+                // Apply settlements
+                confirmedSettlements.forEach(settlement => {
+                    if (balances.hasOwnProperty(settlement.from) && balances.hasOwnProperty(settlement.to)) {
+                        const settlementINR = convertToINR(settlement.amount, settlement.currency || 'INR');
+                        balances[settlement.from] += settlementINR;
+                        balances[settlement.to] -= settlementINR;
                     }
                 });
 
                 const netBalances = Object.entries(balances)
                     .map(([name, netAmount]) => ({ name, netAmount }));
 
-                const givers = netBalances.filter(b => b.netAmount < -0.01).sort((a, b) => a.netAmount - b.netAmount); 
-                const receivers = netBalances.filter(b => b.netAmount > 0.01).sort((a, b) => b.netAmount - a.netAmount); 
-                const settlements = [];
+                const givers = netBalances.filter(b => b.netAmount < -0.01).sort((a, b) => a.netAmount - b.netAmount);
+                const receivers = netBalances.filter(b => b.netAmount > 0.01).sort((a, b) => b.netAmount - a.netAmount);
+                const suggestedSettlements = [];
 
                 let gIdx = 0;
                 let rIdx = 0;
@@ -226,10 +339,9 @@
                 while (gIdx < givers.length && rIdx < receivers.length) {
                     let giver = givers[gIdx];
                     let receiver = receivers[rIdx];
-
                     const amount = Math.min(Math.abs(giver.netAmount), receiver.netAmount);
 
-                    settlements.push({
+                    suggestedSettlements.push({
                         from: giver.name,
                         to: receiver.name,
                         amount: amount.toFixed(2),
@@ -238,68 +350,479 @@
                     giver.netAmount += amount;
                     receiver.netAmount -= amount;
 
-                    if (giver.netAmount >= -0.01) gIdx++; 
-                    if (receiver.netAmount <= 0.01) rIdx++; 
+                    if (giver.netAmount >= -0.01) gIdx++;
+                    if (receiver.netAmount <= 0.01) rIdx++;
                 }
 
-                return { netBalances, settlements, totalShares };
+                return { netBalances, settlements: suggestedSettlements, totalShares };
             };
 
+            // Export to CSV
+            const exportToCSV = () => {
+                const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
+                
+                let csv = 'Date,Description,Amount,Currency,Category,Split Type,Paid By,Status\n';
+                confirmedExpenses.forEach(exp => {
+                    csv += `${exp.date},"${exp.description}",${exp.amount},${exp.currency || 'INR'},${exp.category || 'Other'},${exp.splitType},${exp.paidBy},${exp.status}\n`;
+                });
+
+                csv += '\n\nSettlements\n';
+                csv += 'From,To,Amount,Currency,Date\n';
+                settlements.forEach(s => {
+                    const date = new Date(s.date).toLocaleDateString();
+                    csv += `${s.from},${s.to},${s.amount},${s.currency || 'INR'},${date}\n`;
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${tripSettings.tripName.replace(/\s+/g, '_')}_expense_report.csv`;
+                a.click();
+            };
+
+            // WhatsApp share
+            const shareToWhatsApp = () => {
+                const confirmedTravelers = travelers.filter(t => t.status === 'Confirmed');
+                const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
+                const { settlements: suggestedSettlements } = calculateBalances(confirmedTravelers, confirmedExpenses, settlements);
+
+                let message = `*${tripSettings.tripName} - Settlement Summary*\n\n`;
+                
+                if (suggestedSettlements.length === 0) {
+                    message += '✅ All settled! No pending payments.\n';
+                } else {
+                    message += '*Pending Settlements:*\n';
+                    suggestedSettlements.forEach(s => {
+                        message += `• ${s.from} → ${s.to}: ₹${s.amount}\n`;
+                    });
+                }
+
+                const totalExpense = confirmedExpenses.reduce((sum, e) => {
+                    return sum + convertToINR(e.amount, e.currency || 'INR');
+                }, 0);
+                message += `\n*Total Trip Expense:* ₹${totalExpense.toFixed(2)}`;
+                message += `\n*Per Person:* ₹${(totalExpense / confirmedTravelers.length).toFixed(2)}`;
+
+                const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                window.open(whatsappUrl, '_blank');
+            };
+
+            // Trip Settings Component
+            const TripSettingsPanel = () => {
+                const [editMode, setEditMode] = useState(false);
+                const [tempSettings, setTempSettings] = useState(tripSettings);
+
+                const handleSave = () => {
+                    updateTripSettings(tempSettings);
+                    setEditMode(false);
+                };
+
+                if (!editMode) {
+                    return (
+                        <div className="bg-indigo-50 p-4 rounded-lg mb-4 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-xl font-bold text-indigo-900">{tripSettings.tripName}</h2>
+                                <p className="text-sm text-indigo-700">
+                                    {tripSettings.startDate} to {tripSettings.endDate} | Base Currency: {tripSettings.baseCurrency}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setEditMode(true)}
+                                className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"
+                            >
+                                Edit Trip
+                            </button>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="bg-indigo-50 p-4 rounded-lg mb-4">
+                        <h3 className="text-lg font-bold text-indigo-900 mb-3">Trip Settings</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <input
+                                type="text"
+                                placeholder="Trip Name"
+                                value={tempSettings.tripName}
+                                onChange={(e) => setTempSettings({...tempSettings, tripName: e.target.value})}
+                                className="p-2 border rounded-md"
+                            />
+                            <select
+                                value={tempSettings.baseCurrency}
+                                onChange={(e) => setTempSettings({...tempSettings, baseCurrency: e.target.value})}
+                                className="p-2 border rounded-md"
+                            >
+                                {Object.keys(CURRENCY_RATES).map(curr => (
+                                    <option key={curr} value={curr}>{curr}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="date"
+                                value={tempSettings.startDate}
+                                onChange={(e) => setTempSettings({...tempSettings, startDate: e.target.value})}
+                                className="p-2 border rounded-md"
+                            />
+                            <input
+                                type="date"
+                                value={tempSettings.endDate}
+                                onChange={(e) => setTempSettings({...tempSettings, endDate: e.target.value})}
+                                className="p-2 border rounded-md"
+                            />
+                        </div>
+                        <div className="flex space-x-2">
+                            <button onClick={handleSave} className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                                Save
+                            </button>
+                            <button onClick={() => {setEditMode(false); setTempSettings(tripSettings);}} className="bg-gray-400 text-white px-4 py-2 rounded-md hover:bg-gray-500">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Category Breakdown Component
+            const CategoryBreakdown = () => {
+                const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
+                const categoryTotals = {};
+                let totalExpense = 0;
+
+                confirmedExpenses.forEach(exp => {
+                    const cat = exp.category || 'Other';
+                    const amountINR = convertToINR(exp.amount, exp.currency || 'INR');
+                    categoryTotals[cat] = (categoryTotals[cat] || 0) + amountINR;
+                    totalExpense += amountINR;
+                });
+
+                return (
+                    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 mb-6">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">📊 Expense by Category</h3>
+                        <div className="space-y-3">
+                            {EXPENSE_CATEGORIES.map(cat => {
+                                const amount = categoryTotals[cat] || 0;
+                                const percentage = totalExpense > 0 ? (amount / totalExpense * 100) : 0;
+                                return (
+                                    <div key={cat}>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="font-medium">{cat}</span>
+                                            <span className="text-gray-600">
+                                                ₹{amount.toFixed(2)} ({percentage.toFixed(1)}%)
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-5">
+                                            <div
+                                                className={`${getCategoryColor(cat)} h-5 rounded-full flex items-center justify-end pr-2 text-white text-xs font-semibold`}
+                                                style={{width: `${percentage}%`}}
+                                            >
+                                                {percentage > 10 ? `${percentage.toFixed(0)}%` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="mt-4 pt-4 border-t">
+                            <div className="flex justify-between font-bold text-lg">
+                                <span>Total Expenses</span>
+                                <span className="text-indigo-600">₹{totalExpense.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Recurring Templates Component
+            const RecurringTemplates = () => {
+                const [showForm, setShowForm] = useState(false);
+                const [templateName, setTemplateName] = useState('');
+                const [templateDesc, setTemplateDesc] = useState('');
+                const [templateAmount, setTemplateAmount] = useState('');
+                const [templateCategory, setTemplateCategory] = useState('Food & Dining');
+                const [templateCurrency, setTemplateCurrency] = useState(tripSettings.baseCurrency);
+
+                const handleAddTemplate = (e) => {
+                    e.preventDefault();
+                    addRecurringTemplate({
+                        name: templateName,
+                        description: templateDesc,
+                        amount: parseFloat(templateAmount),
+                        category: templateCategory,
+                        currency: templateCurrency,
+                        splitType: 'Equal'
+                    });
+                    setTemplateName('');
+                    setTemplateDesc('');
+                    setTemplateAmount('');
+                    setShowForm(false);
+                };
+
+                const applyTemplate = (template) => {
+                    addExpense({
+                        date: getFormattedDate(),
+                        description: template.description,
+                        amount: template.amount,
+                        currency: template.currency,
+                        category: template.category,
+                        splitType: template.splitType,
+                        paidBy: travelers.filter(t => t.status === 'Confirmed')[0]?.name || '',
+                        status: 'Confirmed'
+                    });
+                };
+
+                return (
+                    <div className="bg-teal-50 p-6 rounded-lg shadow-md border border-teal-200 mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-teal-800">🔄 Recurring Expense Templates</h3>
+                            <button
+                                onClick={() => setShowForm(!showForm)}
+                                className="bg-teal-600 text-white px-3 py-1 rounded-md text-sm hover:bg-teal-700"
+                            >
+                                {showForm ? 'Cancel' : '+ New Template'}
+                            </button>
+                        </div>
+
+                        {showForm && (
+                            <form onSubmit={handleAddTemplate} className="mb-4 p-4 bg-white rounded-md">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                    <input type="text" placeholder="Template Name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} className="p-2 border rounded-md" required />
+                                    <input type="text" placeholder="Description" value={templateDesc} onChange={(e) => setTemplateDesc(e.target.value)} className="p-2 border rounded-md" required />
+                                    <input type="number" placeholder="Amount" value={templateAmount} onChange={(e) => setTemplateAmount(e.target.value)} className="p-2 border rounded-md" required />
+                                    <select value={templateCurrency} onChange={(e) => setTemplateCurrency(e.target.value)} className="p-2 border rounded-md">
+                                        {Object.keys(CURRENCY_RATES).map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                                    </select>
+                                    <select value={templateCategory} onChange={(e) => setTemplateCategory(e.target.value)} className="p-2 border rounded-md">
+                                        {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <button type="submit" className="w-full bg-teal-600 text-white p-2 rounded-md hover:bg-teal-700">
+                                    Save Template
+                                </button>
+                            </form>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {recurringTemplates.map(template => (
+                                <div key={template.id} className="bg-white p-3 rounded-md shadow-sm flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold text-sm">{template.name}</p>
+                                        <p className="text-xs text-gray-600">{template.description}</p>
+                                        <p className="text-sm text-teal-700 font-bold">{template.currency} {template.amount}</p>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                        <button
+                                            onClick={() => applyTemplate(template)}
+                                            className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600"
+                                        >
+                                            Apply
+                                        </button>
+                                        <button
+                                            onClick={() => deleteRecurringTemplate(template.id)}
+                                            className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {recurringTemplates.length === 0 && (
+                            <p className="text-gray-600 text-sm text-center">No recurring templates yet. Create one to quickly add common expenses.</p>
+                        )}
+                    </div>
+                );
+            };
+
+            // Settlement Components
+            const SettlementRecorder = ({ suggestedSettlements }) => {
+                const [fromPerson, setFromPerson] = useState('');
+                const [toPerson, setToPerson] = useState('');
+                const [amount, setAmount] = useState('');
+                const [currency, setCurrency] = useState(tripSettings.baseCurrency);
+                const confirmedTravelers = travelers.filter(t => t.status === 'Confirmed');
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    if (!fromPerson || !toPerson || !amount) return;
+                    
+                    addSettlement({
+                        from: fromPerson,
+                        to: toPerson,
+                        amount: parseFloat(amount),
+                        currency: currency,
+                        date: new Date().toISOString(),
+                        timestamp: Date.now()
+                    });
+                    
+                    setFromPerson('');
+                    setToPerson('');
+                    setAmount('');
+                };
+
+                const recordSuggestedSettlement = (settlement) => {
+                    addSettlement({
+                        from: settlement.from,
+                        to: settlement.to,
+                        amount: parseFloat(settlement.amount),
+                        currency: 'INR',
+                        date: new Date().toISOString(),
+                        timestamp: Date.now()
+                    });
+                };
+
+                const recordPartialSettlement = (settlement) => {
+                    const partialAmount = prompt(`Enter partial payment amount (suggested: ₹${settlement.amount}):`);
+                    if (partialAmount && parseFloat(partialAmount) > 0) {
+                        addSettlement({
+                            from: settlement.from,
+                            to: settlement.to,
+                            amount: parseFloat(partialAmount),
+                            currency: 'INR',
+                            date: new Date().toISOString(),
+                            timestamp: Date.now()
+                        });
+                    }
+                };
+
+                return (
+                    <div className="bg-purple-50 p-6 rounded-lg shadow-md border border-purple-200 mb-6">
+                        <h3 className="text-xl font-bold text-purple-800 mb-4">💳 Record Settlement Payment</h3>
+                        
+                        {suggestedSettlements.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-sm font-semibold text-purple-700 mb-2">Quick Record:</h4>
+                                <div className="space-y-2">
+                                    {suggestedSettlements.map((s, idx) => (
+                                        <div key={idx} className="flex space-x-2">
+                                            <button
+                                                onClick={() => recordSuggestedSettlement(s)}
+                                                className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm"
+                                            >
+                                                ✓ {s.from} paid {s.to} ₹{s.amount}
+                                            </button>
+                                            <button
+                                                onClick={() => recordPartialSettlement(s)}
+                                                className="bg-purple-400 text-white px-3 py-2 rounded-md hover:bg-purple-500 text-sm"
+                                                title="Record partial payment"
+                                            >
+                                                Partial
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <hr className="my-4 border-purple-300" />
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmit}>
+                            <h4 className="text-sm font-semibold text-purple-700 mb-2">Custom Settlement:</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+                                <select value={fromPerson} onChange={(e) => setFromPerson(e.target.value)} className="p-2 border rounded-md" required>
+                                    <option value="">-- Who Paid --</option>
+                                    {confirmedTravelers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                </select>
+                                <select value={toPerson} onChange={(e) => setToPerson(e.target.value)} className="p-2 border rounded-md" required>
+                                    <option value="">-- Paid To --</option>
+                                    {confirmedTravelers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                </select>
+                                <input type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="p-2 border rounded-md" required />
+                                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="p-2 border rounded-md">
+                                    {Object.keys(CURRENCY_RATES).map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                                </select>
+                            </div>
+                            <button type="submit" className="w-full bg-purple-600 text-white p-2 rounded-md hover:bg-purple-700">
+                                Record Settlement
+                            </button>
+                        </form>
+                    </div>
+                );
+            };
+
+            const SettlementHistory = () => {
+                const sortedSettlements = [...settlements].sort((a, b) => b.timestamp - a.timestamp);
+
+                return (
+                    <div className="bg-indigo-50 p-6 rounded-lg shadow-md border border-indigo-200 mb-6">
+                        <h3 className="text-xl font-bold text-indigo-800 mb-4">📜 Settlement History</h3>
+                        {sortedSettlements.length === 0 ? (
+                            <p className="text-gray-600 text-sm">No settlements recorded yet.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {sortedSettlements.map(s => (
+                                    <div key={s.id} className="bg-white p-3 rounded-md shadow-sm flex justify-between items-center">
+                                        <div>
+                                            <p className="text-sm">
+                                                <span className="font-semibold">{s.from}</span> paid{' '}
+                                                <span className="font-semibold">{s.to}</span>{' '}
+                                                <span className="text-green-600 font-bold">{s.currency || 'INR'} {parseFloat(s.amount).toFixed(2)}</span>
+                                            </p>
+                                            <p className="text-xs text-gray-500">{new Date(s.date).toLocaleString()}</p>
+                                        </div>
+                                        <button onClick={() => deleteSettlement(s.id)} className="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded bg-red-50">
+                                            Delete
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
 
             const ExpenseSplitCalculator = () => {
                 const confirmedTravelers = travelers.filter(t => t.status === 'Confirmed');
                 const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
 
                 if (confirmedTravelers.length === 0) {
-                    return <div className="p-4 bg-yellow-100 text-yellow-800 rounded-md">Please confirm at least one traveler to calculate splits.</div>;
+                    return <div className="p-4 bg-yellow-100 text-yellow-800 rounded-md">Please confirm at least one traveler.</div>;
                 }
                 
-                const equalSplitExpenses = confirmedExpenses.filter(e => e.splitType === 'Equal');
+                const equalSplitExpenses = confirmedExpenses.filter(e => e.splitType === 'Equal' || e.splitType === 'Custom');
 
                 if (equalSplitExpenses.length === 0) {
-                    return <div className="p-4 bg-blue-100 text-blue-800 rounded-md">No 'Equal Split' expenses have been confirmed to calculate settlement.</div>;
+                    return <div className="p-4 bg-blue-100 text-blue-800 rounded-md">No confirmed expenses yet.</div>;
                 }
 
-                const { netBalances, settlements } = calculateBalances(confirmedTravelers, equalSplitExpenses);
+                const { netBalances, settlements: suggestedSettlements } = calculateBalances(confirmedTravelers, equalSplitExpenses, settlements);
 
                 return (
-                    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 mb-6">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            💰 Expense Settlement Breakdown
-                        </h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Net Balances */}
-                            <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                                <h4 className="font-semibold text-lg text-indigo-700 mb-3 border-b pb-2">Net Balances (Who owes whom)</h4>
-                                <ul className="space-y-2">
-                                    {netBalances.map((b, index) => (
-                                        <li key={index} className="flex justify-between text-sm">
-                                            <span>{b.name}</span>
-                                            <span className={`font-mono font-bold ${b.netAmount > 0 ? 'text-green-600' : b.netAmount < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                                                ₹{Math.abs(b.netAmount).toFixed(2)} {b.netAmount > 0 ? '(Owed)' : b.netAmount < 0 ? '(Owes)' : ''}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <p className="text-xs text-gray-500 mt-2">*Calculation based on **Confirmed** 'Equal Split' expenses.</p>
-                            </div>
+                    <>
+                        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 mb-6">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">💰 Current Balance Status</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                                    <h4 className="font-semibold text-lg text-indigo-700 mb-3 border-b pb-2">Net Balances</h4>
+                                    <ul className="space-y-2">
+                                        {netBalances.map((b, index) => (
+                                            <li key={index} className="flex justify-between text-sm">
+                                                <span>{b.name}</span>
+                                                <span className={`font-mono font-bold ${b.netAmount > 0 ? 'text-green-600' : b.netAmount < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                                    ₹{Math.abs(b.netAmount).toFixed(2)} {b.netAmount > 0 ? '(Owed)' : b.netAmount < 0 ? '(Owes)' : '(Settled)'}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
 
-                            {/* Settlements */}
-                            <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                                <h4 className="font-semibold text-lg text-purple-700 mb-3 border-b pb-2">Settlement Steps (Minimum Transfers)</h4>
-                                <ul className="space-y-2">
-                                    {settlements.length > 0 ? settlements.map((s, index) => (
-                                        <li key={index} className="text-sm bg-purple-100 p-2 rounded-md">
-                                            <span className="font-semibold">{s.from}</span> pays <span className="font-semibold">{s.to}</span> **₹{s.amount}**
-                                        </li>
-                                    )) : (
-                                        <li className="text-sm text-gray-600">All balances are settled (or no common expenses recorded).</li>
-                                    )}
-                                </ul>
+                                <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                                    <h4 className="font-semibold text-lg text-purple-700 mb-3 border-b pb-2">Remaining Settlements</h4>
+                                    <ul className="space-y-2">
+                                        {suggestedSettlements.length > 0 ? suggestedSettlements.map((s, index) => (
+                                            <li key={index} className="text-sm bg-purple-100 p-2 rounded-md">
+                                                <span className="font-semibold">{s.from}</span> → <span className="font-semibold">{s.to}</span> <strong>₹{s.amount}</strong>
+                                            </li>
+                                        )) : (
+                                            <li className="text-sm text-green-600 font-semibold">✅ All settled!</li>
+                                        )}
+                                    </ul>
+                                </div>
                             </div>
                         </div>
-                    </div>
+
+                        <SettlementRecorder suggestedSettlements={suggestedSettlements} />
+                        <SettlementHistory />
+                    </>
                 );
             };
 
@@ -307,99 +830,76 @@
                 const confirmedTravelers = travelers.filter(t => t.status === 'Confirmed');
                 const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
                 const [selectedTraveler, setSelectedTraveler] = useState('');
-                const componentRef = useRef();
 
-                const travelerName = selectedTraveler;
-
-                const handlePrint = () => {
-                    window.print();
-                };
+                const handlePrint = () => window.print();
 
                 if (confirmedTravelers.length === 0) {
-                    return <div className="p-4 bg-yellow-100 text-yellow-800 rounded-md">Please confirm at least one traveler to generate a bill.</div>;
+                    return <div className="p-4 bg-yellow-100 text-yellow-800 rounded-md">Please confirm at least one traveler.</div>;
                 }
 
+                const travelerName = selectedTraveler;
                 const travelerExpensesPaid = confirmedExpenses.filter(e => e.paidBy === travelerName);
-                const totalPaid = travelerExpensesPaid.reduce((sum, exp) => sum + exp.amount, 0);
+                const totalPaid = travelerExpensesPaid.reduce((sum, exp) => sum + convertToINR(exp.amount, exp.currency || 'INR'), 0);
 
-                const { totalShares } = calculateBalances(confirmedTravelers, confirmedExpenses);
+                const { totalShares } = calculateBalances(confirmedTravelers, confirmedExpenses, settlements);
                 const totalOwedShare = totalShares[travelerName] || 0;
-
                 const netBalance = totalPaid - totalOwedShare;
 
                 return (
                     <div className="bg-gray-50 p-6 rounded-lg shadow-md border border-gray-200 mt-6 no-print">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            🧾 Individual Bill Generator
-                        </h3>
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">🧾 Individual Bill</h3>
                         <div className="flex items-center space-x-4 mb-6">
-                            <select
-                                value={selectedTraveler}
-                                onChange={(e) => setSelectedTraveler(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 w-full md:w-1/3"
-                            >
-                                <option value="">-- Select Traveler for Bill --</option>
-                                {confirmedTravelers.map(t => (
-                                    <option key={t.id} value={t.name}>{t.name}</option>
-                                ))}
+                            <select value={selectedTraveler} onChange={(e) => setSelectedTraveler(e.target.value)} className="p-2 border rounded-md w-full md:w-1/3">
+                                <option value="">-- Select Traveler --</option>
+                                {confirmedTravelers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                             </select>
-                            <button
-                                onClick={handlePrint}
-                                disabled={!selectedTraveler}
-                                className={`px-4 py-2 rounded-md text-sm font-semibold ${selectedTraveler ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
-                            >
-                                Print Bill
+                            <button onClick={handlePrint} disabled={!selectedTraveler} className={`px-4 py-2 rounded-md text-sm font-semibold ${selectedTraveler ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
+                                Print
                             </button>
                         </div>
                         
                         {selectedTraveler && (
-                            <div ref={componentRef} className="p-4 bg-white rounded-lg border-2 border-indigo-200">
-                                <h4 className="text-2xl font-bold text-indigo-700 mb-4">Trip Bill for {travelerName}</h4>
+                            <div className="p-4 bg-white rounded-lg border-2 border-indigo-200">
+                                <h4 className="text-2xl font-bold text-indigo-700 mb-4">Bill for {travelerName}</h4>
                                 
-                                {/* Summary Box */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4 mb-4">
-    <div className="bg-green-50 p-3 rounded-md">
-        <p className="text-xs text-green-700 font-medium">Total Paid (Contribution)</p>
-        <p className="text-lg md:text-xl font-bold text-green-900">₹{totalPaid.toFixed(2)}</p>
-    </div>
-    <div className="bg-red-50 p-3 rounded-md">
-        <p className="text-xs text-red-700 font-medium">Total Share (Owed by Traveler)</p>
-        <p className="text-lg md:text-xl font-bold text-red-900">₹{totalOwedShare.toFixed(2)}</p>
-    </div>
-    <div className={`p-3 rounded-md ${netBalance >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
-        <p className={`text-xs ${netBalance >= 0 ? 'text-indigo-700' : 'text-orange-700'} font-medium`}>
-            Net Balance ({netBalance >= 0 ? 'Refund Due' : 'Payment Due'})
-        </p>
-        <p className="text-xl md:text-2xl font-extrabold text-indigo-900 break-words">
-            {netBalance >= 0 ? '+' : '-'} ₹{Math.abs(netBalance).toFixed(2)}
-        </p>
-    </div>
-</div>
+                                    <div className="bg-green-50 p-2 md:p-3 rounded-md min-w-0">
+                                        <p className="text-xs text-green-700 font-medium">Total Paid</p>
+                                        <p className="text-lg md:text-xl font-bold text-green-900 break-words">₹{totalPaid.toFixed(2)}</p>
+                                    </div>
+                                    <div className="bg-red-50 p-2 md:p-3 rounded-md min-w-0">
+                                        <p className="text-xs text-red-700 font-medium">Total Share</p>
+                                        <p className="text-lg md:text-xl font-bold text-red-900 break-words">₹{totalOwedShare.toFixed(2)}</p>
+                                    </div>
+                                    <div className={`p-2 md:p-3 rounded-md min-w-0 ${netBalance >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
+                                        <p className={`text-xs ${netBalance >= 0 ? 'text-indigo-700' : 'text-orange-700'} font-medium`}>Net Balance</p>
+                                        <p className="text-xl md:text-2xl font-extrabold text-indigo-900 break-words">
+                                            {netBalance >= 0 ? '+' : '-'} ₹{Math.abs(netBalance).toFixed(2)}
+                                        </p>
+                                    </div>
+                                </div>
 
-                                {/* Details Table */}
-                                <h5 className="font-semibold text-lg mb-2 text-gray-700">Detailed Contributions (Paid By {travelerName})</h5>
+                                <h5 className="font-semibold text-lg mb-2 text-gray-700">Contributions</h5>
                                 <table className="min-w-full text-sm mb-4">
                                     <thead>
                                         <tr className="bg-gray-100">
                                             <th className="px-3 py-2 text-left">Date</th>
                                             <th className="px-3 py-2 text-left">Description</th>
-                                            <th className="px-3 py-2 text-right">Amount Paid</th>
+                                            <th className="px-3 py-2 text-right">Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {travelerExpensesPaid.length > 0 ? travelerExpensesPaid.map(exp => (
                                             <tr key={exp.id} className="border-b">
                                                 <td className="px-3 py-2">{exp.date}</td>
-                                                <td className="px-3 py-2">{exp.description} ({exp.splitType} Split)</td>
-                                                <td className="px-3 py-2 text-right">₹{exp.amount.toFixed(2)}</td>
+                                                <td className="px-3 py-2">{exp.description}</td>
+                                                <td className="px-3 py-2 text-right">{exp.currency || 'INR'} {exp.amount.toFixed(2)}</td>
                                             </tr>
                                         )) : (
-                                            <tr><td colSpan="3" className="px-3 py-2 text-center text-gray-500">No confirmed contributions recorded.</td></tr>
+                                            <tr><td colSpan="3" className="px-3 py-2 text-center text-gray-500">No contributions.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
-                                
-                                <p className="text-xs text-gray-500 mt-4">Note: The total share (₹{totalOwedShare.toFixed(2)}) is {travelerName}'s equal share of all confirmed 'Equal Split' expenses.</p>
                             </div>
                         )}
                     </div>
@@ -408,10 +908,8 @@
 
             const TabButton = ({ name, label }) => (
                 <button
-                    className={`px-4 py-2 text-sm font-medium focus:outline-none ${
-                        activeTab === name
-                            ? 'border-b-2 border-blue-500 text-blue-600'
-                            : 'text-gray-600 hover:text-gray-800'
+                    className={`px-3 py-2 text-xs md:text-sm font-medium focus:outline-none ${
+                        activeTab === name ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'
                     }`}
                     onClick={() => setActiveTab(name)}
                 >
@@ -420,35 +918,24 @@
             );
 
             const TravelerCard = ({ traveler }) => (
-                <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4">
+                <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0">
                     <div className="flex-grow">
                         <div className="flex items-center space-x-2 mb-1">
                             <span className="font-bold text-gray-800">{traveler.name}</span>
-                            <span className="text-sm text-gray-500">
-                                {traveler.transport === 'Plane' ? '✈️' : '🚆'}
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(traveler.status)}`}>
-                                {traveler.status}
-                            </span>
+                            <span className="text-sm">{traveler.transport === 'Plane' ? '✈️' : '🚆'}</span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(traveler.status)}`}>{traveler.status}</span>
                         </div>
                         <div className="text-xs text-gray-600">
                             Arrival: {traveler.arrival}, Departure: {traveler.departure}
                         </div>
                     </div>
                     <div className="flex space-x-2">
-                           <select
-                                className={`px-2 py-1 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${getStatusColor(traveler.status)}`}
-                                value={traveler.status}
-                                onChange={(e) => updateTravelerStatus(traveler.id, e.target.value)}
-                            >
-                                <option value="Confirmed">Confirmed</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Cancelled">Cancelled</option>
-                            </select>
-                        <button
-                            onClick={() => deleteTraveler(traveler.id)}
-                            className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-sm"
-                        >
+                        <select className={`px-2 py-1 rounded-md border text-sm ${getStatusColor(traveler.status)}`} value={traveler.status} onChange={(e) => updateTravelerStatus(traveler.id, e.target.value)}>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <button onClick={() => deleteTraveler(traveler.id)} className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 text-sm">
                             Delete
                         </button>
                     </div>
@@ -456,12 +943,10 @@
             );
 
             const AddTravelerForm = () => {
-                const today = getFormattedDate();
-                const defaultDeparture = getFormattedDate(new Date(new Date().setDate(new Date().getDate() + 5)));
                 const [name, setName] = useState('');
                 const [transport, setTransport] = useState('Plane');
-                const [arrival, setArrival] = useState(today);
-                const [departure, setDeparture] = useState(defaultDeparture);
+                const [arrival, setArrival] = useState(getFormattedDate());
+                const [departure, setDeparture] = useState(getFormattedDate(new Date(Date.now() + 5*24*60*60*1000)));
                 const [status, setStatus] = useState('Confirmed');
 
                 const handleSubmit = (e) => {
@@ -469,63 +954,25 @@
                     if (!name) return;
                     addTraveler({ name, transport, arrival, departure, status });
                     setName('');
-                    setArrival(today);
-                    setDeparture(defaultDeparture);
-                    setStatus('Confirmed');
                 };
 
                 return (
                     <form onSubmit={handleSubmit} className="p-4 bg-blue-50 rounded-lg shadow-sm mb-4">
-                        <h3 className="text-lg font-semibold mb-2 text-blue-700">Add New Traveler</h3>
+                        <h3 className="text-lg font-semibold mb-2 text-blue-700">Add Traveler</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
-                            <input
-                                type="text"
-                                placeholder="Traveler Name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                required
-                            />
-                            <select
-                                value={transport}
-                                onChange={(e) => setTransport(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
-                            >
+                            <input type="text" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="p-2 border rounded-md" required />
+                            <select value={transport} onChange={(e) => setTransport(e.target.value)} className="p-2 border rounded-md">
                                 <option value="Plane">Plane</option>
                                 <option value="Train">Train</option>
                             </select>
-                            <input
-                                type="text"
-                                placeholder="Arrival Date (e.g., Nov 26)"
-                                value={arrival}
-                                onChange={(e) => setArrival(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                required
-                            />
-                            <input
-                                type="text"
-                                placeholder="Departure Date (e.g., Dec 01)"
-                                value={departure}
-                                onChange={(e) => setDeparture(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                required
-                            />
-                             <select
-                                value={status}
-                                onChange={(e) => setStatus(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
-                            >
+                            <input type="text" placeholder="Arrival" value={arrival} onChange={(e) => setArrival(e.target.value)} className="p-2 border rounded-md" required />
+                            <input type="text" placeholder="Departure" value={departure} onChange={(e) => setDeparture(e.target.value)} className="p-2 border rounded-md" required />
+                            <select value={status} onChange={(e) => setStatus(e.target.value)} className="p-2 border rounded-md">
                                 <option value="Confirmed">Confirmed</option>
                                 <option value="Pending">Pending</option>
-                                <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
-                        <button
-                            type="submit"
-                            className="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                        >
-                            Add Traveler
-                        </button>
+                        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Add Traveler</button>
                     </form>
                 );
             };
@@ -533,83 +980,121 @@
             const AddExpenseForm = () => {
                 const [description, setDescription] = useState('');
                 const [amount, setAmount] = useState('');
+                const [currency, setCurrency] = useState(tripSettings.baseCurrency);
+                const [category, setCategory] = useState('Food & Dining');
                 const [splitType, setSplitType] = useState('Equal');
                 const [paidBy, setPaidBy] = useState('');
                 const [status, setStatus] = useState('Confirmed');
+                const [showCustomSplit, setShowCustomSplit] = useState(false);
+                const [customSplits, setCustomSplits] = useState({});
+
+                const confirmedTravelers = travelers.filter(t => t.status === 'Confirmed');
+
+                useEffect(() => {
+                    if (splitType === 'Custom' && confirmedTravelers.length > 0) {
+                        const splits = {};
+                        confirmedTravelers.forEach(t => {
+                            splits[t.name] = '0';
+                        });
+                        setCustomSplits(splits);
+                        setShowCustomSplit(true);
+                    } else {
+                        setShowCustomSplit(false);
+                    }
+                }, [splitType]);
 
                 const handleSubmit = (e) => {
                     e.preventDefault();
                     if (!description || !amount || !paidBy) return;
-                    addExpense({
-                        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    
+                    const expenseData = {
+                        date: getFormattedDate(),
                         description,
                         amount: parseFloat(amount),
+                        currency,
+                        category,
                         splitType,
                         paidBy,
                         status
-                    });
+                    };
+
+                    if (splitType === 'Custom') {
+                        expenseData.customSplits = customSplits;
+                    }
+
+                    addExpense(expenseData);
                     setDescription('');
                     setAmount('');
-                    setSplitType('Equal');
                     setPaidBy('');
-                    setStatus('Confirmed');
+                    setCustomSplits({});
+                };
+
+                const updateCustomSplit = (name, value) => {
+                    setCustomSplits({...customSplits, [name]: value});
+                };
+
+                const distributeEqually = () => {
+                    const amountNum = parseFloat(amount) || 0;
+                    const perPerson = (amountNum / confirmedTravelers.length).toFixed(2);
+                    const splits = {};
+                    confirmedTravelers.forEach(t => {
+                        splits[t.name] = perPerson;
+                    });
+                    setCustomSplits(splits);
                 };
 
                 return (
                     <form onSubmit={handleSubmit} className="p-4 bg-green-50 rounded-lg shadow-sm mb-4">
-                        <h3 className="text-lg font-semibold mb-2 text-green-700">Add New Expense</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                            <input
-                                type="text"
-                                placeholder="Description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-green-500 focus:border-green-500"
-                                required
-                            />
-                            <input
-                                type="number"
-                                placeholder="Amount (e.g., 6000)"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-green-500 focus:border-green-500"
-                                required
-                            />
-                            <select
-                                value={splitType}
-                                onChange={(e) => setSplitType(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-green-500 focus:border-green-500"
-                            >
+                        <h3 className="text-lg font-semibold mb-2 text-green-700">Add Expense</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+                            <input type="text" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} className="p-2 border rounded-md" required />
+                            <input type="number" step="0.01" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="p-2 border rounded-md" required />
+                            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="p-2 border rounded-md">
+                                {Object.keys(CURRENCY_RATES).map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                            </select>
+                            <select value={category} onChange={(e) => setCategory(e.target.value)} className="p-2 border rounded-md">
+                                {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                            <select value={splitType} onChange={(e) => setSplitType(e.target.value)} className="p-2 border rounded-md">
                                 <option value="Equal">Equal Split</option>
-                                <option value="Individual">Individual (Not Split)</option>
-                                <option value="Custom">Custom Split (Advanced)</option>
+                                <option value="Custom">Custom Split</option>
+                                <option value="Individual">Individual</option>
                             </select>
-                             <select
-                                value={paidBy}
-                                onChange={(e) => setPaidBy(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-green-500 focus:border-green-500"
-                                required
-                            >
+                            <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className="p-2 border rounded-md" required>
                                 <option value="">-- Paid By --</option>
-                                {travelers.map(t => (
-                                    <option key={t.id} value={t.name}>{t.name}</option>
-                                ))}
-                            </select>
-                            <select
-                                value={status}
-                                onChange={(e) => setStatus(e.target.value)}
-                                className="p-2 border rounded-md focus:ring-green-500 focus:border-green-500"
-                            >
-                                <option value="Confirmed">Confirmed</option>
-                                <option value="Pending">Pending</option>
+                                {travelers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                             </select>
                         </div>
-                        <button
-                            type="submit"
-                            className="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                        >
-                            Add Expense
-                        </button>
+
+                        {showCustomSplit && (
+                            <div className="mb-3 p-3 bg-yellow-50 rounded-md">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h4 className="text-sm font-semibold text-yellow-800">Custom Split Amounts (in {currency})</h4>
+                                    <button type="button" onClick={distributeEqually} className="text-xs bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700">
+                                        Distribute Equally
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {confirmedTravelers.map(t => (
+                                        <div key={t.id} className="flex items-center space-x-2">
+                                            <label className="text-xs font-medium text-gray-700">{t.name}:</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={customSplits[t.name] || '0'}
+                                                onChange={(e) => updateCustomSplit(t.name, e.target.value)}
+                                                className="p-1 border rounded-md text-sm w-20"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-600 mt-2">
+                                    Total: {currency} {Object.values(customSplits).reduce((sum, val) => sum + parseFloat(val || 0), 0).toFixed(2)} / {amount || 0}
+                                </p>
+                            </div>
+                        )}
+
+                        <button type="submit" className="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700">Add Expense</button>
                     </form>
                 );
             };
@@ -618,86 +1103,106 @@
                 <div className="space-y-4">
                     <AddTravelerForm />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {travelers.map(traveler => (
-                            <TravelerCard key={traveler.id} traveler={traveler} />
-                        ))}
+                        {travelers.map(traveler => <TravelerCard key={traveler.id} traveler={traveler} />)}
                     </div>
                 </div>
             );
 
             const ExpenseCard = ({ expense }) => (
-                <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4">
+                <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-start md:items-center justify-between">
                     <div className="flex-grow">
                         <div className="flex items-center space-x-2 mb-1">
-                            <span className="font-bold text-gray-800">₹{expense.amount.toFixed(2)}</span>
-                            <span className="text-sm text-gray-500">
-                                {expense.description}
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(expense.status)}`}>
-                                {expense.status}
-                            </span>
+                            <span className="font-bold text-gray-800">{expense.currency || 'INR'} {expense.amount.toFixed(2)}</span>
+                            <span className="text-sm text-gray-500">{expense.description}</span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(expense.status)}`}>{expense.status}</span>
                         </div>
                         <div className="text-xs text-gray-600">
-                            Date: {expense.date} | Paid by: {expense.paidBy} | Split: {expense.splitType}
+                            {expense.date} | {expense.paidBy} | {expense.category || 'Other'} | {expense.splitType}
                         </div>
                     </div>
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => deleteExpense(expense.id)}
-                            className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-sm"
-                        >
-                            Delete
-                        </button>
-                    </div>
+                    <button onClick={() => deleteExpense(expense.id)} className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 text-sm mt-2 md:mt-0">
+                        Delete
+                    </button>
                 </div>
             );
 
-            const ExpenseList = () => (
-                <div className="space-y-4">
-                    <AddExpenseForm />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {expenses.map(expense => (
-                            <ExpenseCard key={expense.id} expense={expense} />
-                        ))}
+            const ExpenseList = () => {
+                const [filterCategory, setFilterCategory] = useState('All');
+                const [filterPerson, setFilterPerson] = useState('All');
+
+                const filteredExpenses = expenses.filter(exp => {
+                    const catMatch = filterCategory === 'All' || exp.category === filterCategory;
+                    const personMatch = filterPerson === 'All' || exp.paidBy === filterPerson;
+                    return catMatch && personMatch;
+                });
+
+                return (
+                    <div className="space-y-4">
+                        <AddExpenseForm />
+                        <RecurringTemplates />
+                        
+                        <div className="bg-gray-100 p-3 rounded-md flex space-x-3">
+                            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="p-2 border rounded-md text-sm flex-1">
+                                <option value="All">All Categories</option>
+                                {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                            <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)} className="p-2 border rounded-md text-sm flex-1">
+                                <option value="All">All People</option>
+                                {travelers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {filteredExpenses.map(expense => <ExpenseCard key={expense.id} expense={expense} />)}
+                        </div>
+                        {filteredExpenses.length === 0 && <p className="text-center text-gray-500 py-4">No expenses match your filters.</p>}
                     </div>
-                </div>
-            );
+                );
+            };
 
             const Content = () => {
                 switch (activeTab) {
-                    case 'travelers':
-                        return <TravelerList />;
-                    case 'expenses':
-                        return <ExpenseList />;
-                    case 'splits':
-                        return (
-                            <>
-                                <ExpenseSplitCalculator />
-                                <IndividualBillGenerator />
-                            </>
-                        );
-                    default:
-                        return <TravelerList />;
+                    case 'travelers': return <TravelerList />;
+                    case 'expenses': return <ExpenseList />;
+                    case 'analytics': return <CategoryBreakdown />;
+                    case 'splits': return (<><ExpenseSplitCalculator /><IndividualBillGenerator /></>);
+                    default: return <TravelerList />;
                 }
             };
 
             return (
-                <div className="min-h-screen bg-gray-100 p-4 md:p-8">
-                    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl p-6">
-                        <h1 className="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-4">
-                            🌍 Trip Manager
-                        </h1>
+                <div className="min-h-screen bg-gray-100 p-2 md:p-8">
+                    <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl p-4 md:p-6">
+                        {isOffline && (
+                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 mb-4 text-sm">
+                                ⚠️ You're offline. Changes will sync when connection is restored.
+                            </div>
+                        )}
+                        
+                        <TripSettingsPanel />
 
-                        <div className="flex border-b mb-6 no-print">
+                        <div className="flex justify-between items-center mb-4 no-print">
+                            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">🌍 Trip Manager</h1>
+                            <div className="flex space-x-2">
+                                <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-700">
+                                    📥 Export CSV
+                                </button>
+                                <button onClick={shareToWhatsApp} className="bg-green-500 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-600">
+                                    💬 Share
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex border-b mb-6 no-print overflow-x-auto">
                             <TabButton name="travelers" label="👥 Travelers" />
                             <TabButton name="expenses" label="💸 Expenses" />
-                            <TabButton name="splits" label="⚖️ Splits & Bills" />
+                            <TabButton name="analytics" label="📊 Analytics" />
+                            <TabButton name="splits" label="⚖️ Settlements" />
                         </div>
 
-                        <div className="overflow-y-auto" style={{ maxHeight: '75vh' }}>
+                        <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
                             <Content />
                         </div>
-
                     </div>
                 </div>
             );
