@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trip Manager - Firebase</title>
+    <title>Trip Manager - Firebase Realtime DB</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
     
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
     <style>
         /* Custom scrollbar for better UI */
         .overflow-y-auto::-webkit-scrollbar {
@@ -27,6 +26,7 @@
         }
         .overflow-y-auto::-webkit-scrollbar-thumb:hover {
             background: #555;
+            border-radius: 10px;
         }
         @media print {
             .no-print {
@@ -41,22 +41,27 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // 🛑 2. FIREBASE CONFIGURATION (REPLACE WITH YOUR KEYS) 🛑
+        // 🛑 1. FIREBASE CONFIGURATION 🛑
         const firebaseConfig = {
-          apiKey: "YOUR_API_KEY",
-          authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-          projectId: "YOUR_PROJECT_ID",
-          storageBucket: "YOUR_PROJECT_ID.appspot.com",
-          messagingSenderId: "SENDER_ID",
-          appId: "APP_ID"
+            apiKey: "AIzaSyB5hybGUq4ZhGQJeTW-Rha9hMj8hF6ohR0",
+            authDomain: "trip-2611b.firebaseapp.com",
+            databaseURL: "https://trip-2611b-default-rtdb.firebaseio.com", // Ensure this is correct
+            projectId: "trip-2611b",
+            storageBucket: "trip-2611b.firebasestorage.app",
+            messagingSenderId: "429060121850",
+            appId: "1:429060121850:web:2bc76200815f4be5b59543",
+            measurementId: "G-1ENGW43YXT"
         };
 
-        // Initialize Firebase and Firestore
+        // Initialize Firebase App
         const app = firebase.initializeApp(firebaseConfig);
-        const db = app.firestore();
-        // Define collection references
-        const travelersCol = db.collection("travelers");
-        const expensesCol = db.collection("expenses");
+        
+        // 🛠️ RTDB CHANGE 1: Initialize the Realtime Database
+        const db = app.database(); 
+        
+        // 🛠️ RTDB CHANGE 2: Define Realtime Database references (path to the data)
+        const travelersRef = db.ref("travelers");
+        const expensesRef = db.ref("expenses");
         
         // Initial Data (only used if Firebase collections are empty)
         const initialTravelers = [
@@ -83,10 +88,15 @@
             const [expenses, setExpenses] = useState([]);
             const [loading, setLoading] = useState(true);
 
-            // 🛑 3. FIREBASE DATA FETCH (REPLACES useEffect with localStorage) 🛑
+            // 🛠️ RTDB CHANGE 3: Realtime Data Fetch (replaces onSnapshot)
             useEffect(() => {
-                const unsubscribeTravelers = travelersCol.onSnapshot(snapshot => {
-                    const travelerData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                const travelersListener = travelersRef.on('value', snapshot => {
+                    const travelerObject = snapshot.val() || {};
+                    // RTDB returns an object, we convert it to an array, using the key as the ID
+                    const travelerData = Object.entries(travelerObject).map(([key, value]) => ({ 
+                        ...value, 
+                        id: key 
+                    }));
                     setTravelers(travelerData);
                     setLoading(false);
                 }, error => {
@@ -94,8 +104,13 @@
                     setLoading(false);
                 });
 
-                const unsubscribeExpenses = expensesCol.onSnapshot(snapshot => {
-                    const expenseData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                const expensesListener = expensesRef.on('value', snapshot => {
+                    const expenseObject = snapshot.val() || {};
+                    // Convert RTDB object to an array
+                    const expenseData = Object.entries(expenseObject).map(([key, value]) => ({ 
+                        ...value, 
+                        id: key 
+                    }));
                     setExpenses(expenseData);
                     setLoading(false);
                 }, error => {
@@ -103,70 +118,67 @@
                     setLoading(false);
                 });
 
-                // Cleanup subscription on component unmount
+                // Cleanup subscription on component unmount (using RTDB .off())
                 return () => {
-                    unsubscribeTravelers();
-                    unsubscribeExpenses();
+                    travelersRef.off('value', travelersListener);
+                    expensesRef.off('value', expensesListener);
                 };
             }, []);
             
             if (loading) {
-                return <div className="p-10 text-center text-xl font-semibold text-gray-600">Loading trip data from Firebase...</div>;
+                return <div className="p-10 text-center text-xl font-semibold text-gray-600">Loading trip data from Firebase Realtime Database...</div>;
             }
             
-            // 🛑 4. FIREBASE CRUD OPERATIONS (REPLACES array/localStorage operations) 🛑
+            // 🛠️ RTDB CHANGE 4: Realtime Database CRUD Operations (replaces Firestore functions)
             
             // Traveler Handlers
             const addTraveler = async (newTraveler) => {
                 try {
-                    await travelersCol.add(newTraveler);
+                    // RTDB: .push() is used to add data with a unique, automatically generated ID
+                    await travelersRef.push(newTraveler); 
                 } catch (e) {
-                    console.error("Error adding document: ", e);
+                    console.error("Error adding traveler: ", e);
                 }
             };
 
             const deleteTraveler = async (id) => {
                 try {
-                    await travelersCol.doc(id).delete();
+                    // RTDB: .child(id).remove() deletes the node at that path
+                    await travelersRef.child(id).remove(); 
                 } catch (e) {
-                    console.error("Error deleting document: ", e);
+                    console.error("Error deleting traveler: ", e);
                 }
             };
 
             const updateTravelerStatus = async (id, newStatus) => {
                 try {
-                    await travelersCol.doc(id).update({ status: newStatus });
+                    // RTDB: .child(id).update() updates specific properties of the node
+                    await travelersRef.child(id).update({ status: newStatus }); 
                 } catch (e) {
-                    console.error("Error updating document: ", e);
+                    console.error("Error updating traveler: ", e);
                 }
             };
 
             // Expense Handlers
             const addExpense = async (newExpense) => {
                 try {
-                    await expensesCol.add(newExpense);
+                    // RTDB: .push() is used to add data with a unique, automatically generated ID
+                    await expensesRef.push(newExpense); 
                 } catch (e) {
-                    console.error("Error adding document: ", e);
+                    console.error("Error adding expense: ", e);
                 }
             };
 
             const deleteExpense = async (id) => {
                 try {
-                    await expensesCol.doc(id).delete();
+                    // RTDB: .child(id).remove() deletes the node at that path
+                    await expensesRef.child(id).remove(); 
                 } catch (e) {
-                    console.error("Error deleting document: ", e);
+                    console.error("Error deleting expense: ", e);
                 }
             };
-
-            // ... (rest of the component logic remains the same, using the new async handlers)
             
-            // Note: Data Export/Import functions will need major updates to handle Firebase sync
-            // For now, the old Export/Import functions are removed as they conflict with Firebase sync.
-
-            // The rest of your existing components (TravelerCard, ExpenseSplitCalculator, IndividualBillGenerator, etc.)
-            // remain functional as they rely on the `travelers` and `expenses` state variables, which are now synced by Firebase.
-
-            // --- ALL OTHER COMPONENTS GO HERE (SAME AS PREVIOUS CODE) ---
+            // --- ALL OTHER COMPONENTS GO HERE (UNCHANGED LOGIC) ---
 
             const getStatusColor = (status) => {
                 switch (status) {
@@ -611,208 +623,79 @@
                 </div>
             );
 
-            const ExpenseTable = () => (
-                <div className="space-y-6">
-                     <AddExpenseForm />
-                     <ExpenseSplitCalculator />
-                     <IndividualBillGenerator />
-                    <div className="overflow-x-auto">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            📋 All Trip Expenses
-                        </h3>
-                        <table className="min-w-full bg-white rounded-lg shadow-md overflow-hidden">
-                            <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Split Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid By</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {expenses.map(expense => (
-                                    <tr key={expense.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.description}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{expense.amount.toLocaleString()}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.splitType}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.paidBy}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(expense.status)}`}>
-                                                {expense.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
-                                                onClick={() => deleteExpense(expense.id)}
-                                                className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-sm"
-                                            >
-                                                Delete
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            const ExpenseCard = ({ expense }) => (
+                <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4">
+                    <div className="flex-grow">
+                        <div className="flex items-center space-x-2 mb-1">
+                            <span className="font-bold text-gray-800">₹{expense.amount.toFixed(2)}</span>
+                            <span className="text-sm text-gray-500">
+                                {expense.description}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(expense.status)}`}>
+                                {expense.status}
+                            </span>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                            Date: {expense.date} | Paid by: {expense.paidBy} | Split: {expense.splitType}
+                        </div>
+                    </div>
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={() => deleteExpense(expense.id)}
+                            className="text-red-500 hover:text-red-700 px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-sm"
+                        >
+                            Delete
+                        </button>
                     </div>
                 </div>
             );
 
-            const DailySchedule = () => {
-                const tripStartDate = new Date('2025-11-26');
-                const tripEndDate = new Date('2025-12-01');
-                const days = [];
-                for (let d = new Date(tripStartDate); d <= tripEndDate; d.setDate(d.getDate() + 1)) {
-                    days.push(new Date(d));
+            const ExpenseList = () => (
+                <div className="space-y-4">
+                    <AddExpenseForm />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {expenses.map(expense => (
+                            <ExpenseCard key={expense.id} expense={expense} />
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const Content = () => {
+                switch (activeTab) {
+                    case 'travelers':
+                        return <TravelerList />;
+                    case 'expenses':
+                        return <ExpenseList />;
+                    case 'splits':
+                        return (
+                            <>
+                                <ExpenseSplitCalculator />
+                                <IndividualBillGenerator />
+                            </>
+                        );
+                    default:
+                        return <TravelerList />;
                 }
-
-                const toDateOnly = (dateStr) => {
-                    const date = new Date(`2025 ${dateStr}`);
-                    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-                };
-
-                return (
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <h2 className="text-xl font-semibold mb-4">Daily Schedule & Headcount</h2>
-                        <div className="space-y-4">
-                            {days.map((date, index) => {
-                                const formattedDate = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                                const currentDateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-                                
-                                const travelersPresent = travelers.filter(t => {
-                                    const arrivalDate = toDateOnly(t.arrival);
-                                    const departureDate = toDateOnly(t.departure);
-
-                                    return currentDateOnly >= arrivalDate && currentDateOnly <= departureDate && t.status === 'Confirmed';
-                                });
-                                return (
-                                    <div key={index} className="border-b pb-3">
-                                        <h3 className="font-semibold text-lg text-gray-800">{formattedDate} (<span className="text-blue-600">{travelersPresent.length}</span> present)</h3>
-                                        <ul className="list-disc list-inside text-gray-600">
-                                            {travelersPresent.length > 0 ?
-                                                travelersPresent.map(t => <li key={t.id}>{t.name}</li>) :
-                                                <li>No confirmed travelers present</li>
-                                            }
-                                        </ul>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                );
             };
-
-
-            const Dashboard = () => {
-                const confirmedExpenses = expenses.filter(e => e.status === 'Confirmed');
-                const totalTravelers = travelers.length;
-                const confirmedTravelersCount = travelers.filter(t => t.status === 'Confirmed').length;
-                const planeTravelers = travelers.filter(t => t.transport === 'Plane').length;
-                const trainTravelers = travelers.filter(t => t.transport === 'Train').length;
-
-                const totalExpensesAmount = confirmedExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-                const averageExpensePerConfirmedTraveler = confirmedTravelersCount > 0 ? (totalExpensesAmount / confirmedTravelersCount) : 0;
-                const pendingExpenses = expenses.filter(exp => exp.status === 'Pending').length;
-
-                return (
-                    <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
-                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Trip Overview</h2>
-
-                        {/* Top Bar */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-md shadow-sm flex items-center justify-between">
-                                <div>
-                                    <p className="text-2xl font-bold text-blue-700">{totalTravelers}</p>
-                                    <p className="text-sm text-blue-600">Travelers (Total)</p>
-                                </div>
-                                <span className="text-blue-500 text-3xl">👥</span>
-                            </div>
-                            <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-md shadow-sm flex items-center justify-between">
-                                <div>
-                                    <p className="text-2xl font-bold text-green-700">{confirmedTravelersCount}</p>
-                                    <p className="text-sm text-green-600">Confirmed Travelers</p>
-                                </div>
-                                <span className="text-green-500 text-3xl">✅</span>
-                            </div>
-                            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm flex items-center justify-between">
-                                <div>
-                                    <p className="text-2xl font-bold text-red-700">₹{totalExpensesAmount.toLocaleString()}</p>
-                                    <p className="text-sm text-red-600">Confirmed Expenses</p>
-                                </div>
-                                <span className="text-red-500 text-3xl">💰</span>
-                            </div>
-                             <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-md shadow-sm flex items-center justify-between">
-                                <div>
-                                    <p className="text-2xl font-bold text-yellow-700">{pendingExpenses}</p>
-                                    <p className="text-sm text-yellow-600">Pending Expenses</p>
-                                </div>
-                                <span className="text-yellow-500 text-3xl">⏱️</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Financial Summary */}
-                            <div className="bg-gray-50 p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
-                                <h3 className="text-lg font-semibold mb-3 text-purple-700">Financial Summary</h3>
-                                <p className="text-gray-700 mb-1">Total Confirmed Expenses: <span className="font-medium">₹{totalExpensesAmount.toLocaleString()}</span></p>
-                                <p className="text-gray-700 mb-1">Avg. Expense per Confirmed Traveler: <span className="font-medium">₹{averageExpensePerConfirmedTraveler.toFixed(2)}</span></p>
-                                <p className="text-gray-700 mb-1">Plane Travelers: <span className="font-medium text-blue-700">{planeTravelers}</span></p>
-                                <p className="text-gray-700">Train Travelers: <span className="font-medium text-blue-700">{trainTravelers}</span></p>
-                            </div>
-
-                            {/* Expense Breakdown (Example) */}
-                            <div className="bg-gray-50 p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
-                                <h3 className="text-lg font-semibold mb-3 text-indigo-700">Expense Type Breakdown</h3>
-                                <p className="text-gray-700 mb-1">Equal Split: <span className="font-medium">{expenses.filter(e => e.splitType === 'Equal').length}</span></p>
-                                <p className="text-gray-700 mb-1">Individual: <span className="font-medium">{expenses.filter(e => e.splitType === 'Individual').length}</span></p>
-                                <p className="text-gray-700 mb-1">Custom: <span className="font-medium">{expenses.filter(e => e.splitType === 'Custom').length}</span></p>
-                                <p className="text-gray-700">Total Expenses: <span className="font-medium">{expenses.length}</span></p>
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
 
             return (
-                <div className="min-h-screen bg-gray-100 p-4 sm:p-6 font-sans">
-                    {/* Header */}
-                    <div className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 no-print">
-                        <h1 className="text-3xl font-bold text-gray-800">Trip Planner 2025</h1>
-                        <div className="flex items-center space-x-4">
-                            <span className="text-gray-600">{travelers.length} Travelers</span>
-                            <span className="text-gray-600">Nov 26 - Dec 1</span>
-                        </div>
-                    </div>
+                <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+                    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl p-6">
+                        <h1 className="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-4">
+                            🌍 Trip Manager
+                        </h1>
 
-                    {/* Main Card Container */}
-                    <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-                        {/* Tabs */}
-                        <div className="border-b border-gray-200 bg-gray-50 no-print">
-                            <nav className="-mb-px flex space-x-4 px-4 sm:px-6">
-                                <TabButton name="travelers" label="Travelers" />
-                                <TabButton name="expenses" label="Expenses" />
-                                <TabButton name="schedule" label="Daily Schedule" />
-                                <TabButton name="dashboard" label="Dashboard" />
-                            </nav>
+                        <div className="flex border-b mb-6 no-print">
+                            <TabButton name="travelers" label="👥 Travelers" />
+                            <TabButton name="expenses" label="💸 Expenses" />
+                            <TabButton name="splits" label="⚖️ Splits & Bills" />
                         </div>
 
-                        {/* Content Area */}
-                        <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(100vh-200px)]"> {/* Adjust max-height as needed */}
-                            {activeTab === 'travelers' && <TravelerList />}
-                            {activeTab === 'expenses' && <ExpenseTable />}
-                            {activeTab === 'schedule' && <DailySchedule />}
-                            {activeTab === 'dashboard' && <Dashboard />}
+                        <div className="overflow-y-auto" style={{ maxHeight: '75vh' }}>
+                            <Content />
                         </div>
 
-                        {/* Footer / Data Management (Export/Import removed due to Firebase) */}
-                        <div className="border-t border-gray-200 bg-gray-50 p-4 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0 no-print">
-                            <p className="text-sm text-gray-500">Data is automatically synced with Firebase Firestore.</p>
-                            <p className="text-sm text-gray-500">Last updated: {new Date().toLocaleString()}</p>
-                        </div>
                     </div>
                 </div>
             );
