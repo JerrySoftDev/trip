@@ -357,22 +357,24 @@
                                 <h4 className="text-2xl font-bold text-indigo-700 mb-4">Trip Bill for {travelerName}</h4>
                                 
                                 {/* Summary Box */}
-                                <div className="grid grid-cols-3 gap-4 border-b pb-4 mb-4">
-                                    <div className="bg-green-50 p-3 rounded-md">
-                                        <p className="text-xs text-green-700 font-medium">Total Paid (Contribution)</p>
-                                        <p className="text-xl font-bold text-green-900">₹{totalPaid.toFixed(2)}</p>
-                                    </div>
-                                    <div className="bg-red-50 p-3 rounded-md">
-                                        <p className="text-xs text-red-700 font-medium">Total Share (Owed by Traveler)</p>
-                                        <p className="text-xl font-bold text-red-900">₹{totalOwedShare.toFixed(2)}</p>
-                                    </div>
-                                    <div className={`p-3 rounded-md ${netBalance >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
-                                        <p className={`text-xs ${netBalance >= 0 ? 'text-indigo-700' : 'text-orange-700'} font-medium`}>Net Balance ({netBalance >= 0 ? 'Refund Due' : 'Payment Due'})</p>
-                                        <p className="text-2xl font-extrabold text-indigo-900">
-                                            {netBalance >= 0 ? '+' : '-'} ₹{Math.abs(netBalance).toFixed(2)}
-                                        </p>
-                                    </div>
-                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4 mb-4">
+    <div className="bg-green-50 p-3 rounded-md">
+        <p className="text-xs text-green-700 font-medium">Total Paid (Contribution)</p>
+        <p className="text-lg md:text-xl font-bold text-green-900">₹{totalPaid.toFixed(2)}</p>
+    </div>
+    <div className="bg-red-50 p-3 rounded-md">
+        <p className="text-xs text-red-700 font-medium">Total Share (Owed by Traveler)</p>
+        <p className="text-lg md:text-xl font-bold text-red-900">₹{totalOwedShare.toFixed(2)}</p>
+    </div>
+    <div className={`p-3 rounded-md ${netBalance >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
+        <p className={`text-xs ${netBalance >= 0 ? 'text-indigo-700' : 'text-orange-700'} font-medium`}>
+            Net Balance ({netBalance >= 0 ? 'Refund Due' : 'Payment Due'})
+        </p>
+        <p className="text-xl md:text-2xl font-extrabold text-indigo-900 break-words">
+            {netBalance >= 0 ? '+' : '-'} ₹{Math.abs(netBalance).toFixed(2)}
+        </p>
+    </div>
+</div>
 
                                 {/* Details Table */}
                                 <h5 className="font-semibold text-lg mb-2 text-gray-700">Detailed Contributions (Paid By {travelerName})</h5>
