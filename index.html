@@ -16,7 +16,7 @@
         .overflow-y-auto::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
         .overflow-y-auto::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
         .overflow-y-auto::-webkit-scrollbar-thumb:hover { background: #555; }
-        @media print { 
+        @media print {
             .no-print { display: none !important; }
             body { background: white; }
             .print-page-break { page-break-after: always; }
@@ -25,6 +25,286 @@
             height: 20px;
             border-radius: 4px;
             transition: width 0.3s ease;
+        }
+
+        /* Chat Styles */
+        .chat-float-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            z-index: 9998;
+        }
+        .chat-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+        }
+        .chat-float-btn.has-unread {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+            50% { box-shadow: 0 4px 20px rgba(102, 126, 234, 0.8); }
+        }
+        .chat-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .chat-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.2s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .chat-modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            height: 600px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .chat-close-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f9fafb;
+        }
+        .chat-message {
+            margin-bottom: 12px;
+            animation: messageSlide 0.3s;
+        }
+        @keyframes messageSlide {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-message-header {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chat-message-bubble {
+            background: white;
+            padding: 10px 14px;
+            border-radius: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            word-wrap: break-word;
+            max-width: 80%;
+            position: relative;
+        }
+        .chat-message.own .chat-message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-left: auto;
+        }
+        .chat-message.own .chat-message-header {
+            text-align: right;
+            color: #9ca3af;
+        }
+        .chat-seen-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+        .chat-seen-avatars {
+            display: flex;
+            margin-left: 4px;
+        }
+        .chat-seen-avatar {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            font-weight: bold;
+            margin-left: -4px;
+            border: 2px solid white;
+        }
+        .chat-input-area {
+            padding: 16px;
+            border-top: 1px solid #e5e7eb;
+            background: white;
+            border-radius: 0 0 16px 16px;
+        }
+        .chat-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #e5e7eb;
+            border-radius: 24px;
+            outline: none;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+        .chat-send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: transform 0.2s;
+        }
+        .chat-send-btn:hover {
+            transform: scale(1.1);
+        }
+        .chat-send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .chat-online-users {
+            padding: 12px 16px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .chat-online-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .chat-online-user {
+            background: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .chat-online-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+        .chat-username-prompt {
+            padding: 24px;
+            text-align: center;
+        }
+        .chat-username-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            margin: 16px 0;
+            font-size: 16px;
+            outline: none;
+        }
+        .chat-username-input:focus {
+            border-color: #667eea;
+        }
+        .chat-username-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .chat-username-btn:hover {
+            transform: translateY(-2px);
+        }
+        .chat-typing-indicator {
+            padding: 8px 16px;
+            font-size: 12px;
+            color: #6b7280;
+            font-style: italic;
+            min-height: 28px;
         }
     </style>
 </head>
@@ -99,6 +379,275 @@
             return amountINR / (CURRENCY_RATES[targetCurrency] || 1);
         };
 
+        // Chat Component using Firebase
+        const ChatModal = ({ isOpen, onClose, currentUser }) => {
+            const [username, setUsername] = useState('');
+            const [hasUsername, setHasUsername] = useState(false);
+            const [messages, setMessages] = useState([]);
+            const [inputMessage, setInputMessage] = useState('');
+            const [onlineUsers, setOnlineUsers] = useState([]);
+            const [typingUsers, setTypingUsers] = useState({});
+            const messagesEndRef = useRef(null);
+            const typingTimeoutRef = useRef(null);
+            const userPresenceRef = useRef(null);
+            const myConnectionId = useRef(Date.now() + Math.random());
+
+            // Firebase refs
+            const chatMessagesRef = db.ref('chatMessages');
+            const chatUsersRef = db.ref('chatUsers');
+            const chatTypingRef = db.ref('chatTyping');
+
+            useEffect(() => {
+                if (!isOpen || !hasUsername) return;
+
+                // Set user as online
+                userPresenceRef.current = chatUsersRef.child(myConnectionId.current);
+                userPresenceRef.current.set({
+                    username: username,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+
+                // Remove user on disconnect
+                userPresenceRef.current.onDisconnect().remove();
+
+                // Listen for online users
+                const usersListener = chatUsersRef.on('value', (snapshot) => {
+                    const users = [];
+                    snapshot.forEach((child) => {
+                        users.push(child.val().username);
+                    });
+                    setOnlineUsers(users);
+                });
+
+                // Listen for messages (last 50)
+                const messagesListener = chatMessagesRef.limitToLast(50).on('value', (snapshot) => {
+                    const msgs = [];
+                    snapshot.forEach((child) => {
+                        msgs.push({ ...child.val(), id: child.key });
+                    });
+                    setMessages(msgs);
+                });
+
+                // Listen for typing indicators
+                const typingListener = chatTypingRef.on('value', (snapshot) => {
+                    const typing = snapshot.val() || {};
+                    setTypingUsers(typing);
+                });
+
+                return () => {
+                    chatUsersRef.off('value', usersListener);
+                    chatMessagesRef.off('value', messagesListener);
+                    chatTypingRef.off('value', typingListener);
+                    if (userPresenceRef.current) {
+                        userPresenceRef.current.remove();
+                    }
+                };
+            }, [isOpen, hasUsername, username]);
+
+            useEffect(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+                // Mark messages as seen
+                if (hasUsername && messages.length > 0 && isOpen) {
+                    messages.forEach(msg => {
+                        if (msg.username !== username && msg.id) {
+                            const seenBy = msg.seenBy || [];
+                            if (!seenBy.includes(username)) {
+                                chatMessagesRef.child(msg.id).child('seenBy').transaction((current) => {
+                                    const list = current || [];
+                                    if (!list.includes(username)) {
+                                        list.push(username);
+                                    }
+                                    return list;
+                                });
+                            }
+                        }
+                    });
+                }
+            }, [messages, hasUsername, username, isOpen]);
+
+            const handleSetUsername = (e) => {
+                e.preventDefault();
+                if (username.trim()) {
+                    setHasUsername(true);
+                }
+            };
+
+            const handleSendMessage = (e) => {
+                e.preventDefault();
+                if (inputMessage.trim() && hasUsername) {
+                    chatMessagesRef.push({
+                        username,
+                        text: inputMessage.trim(),
+                        timestamp: firebase.database.ServerValue.TIMESTAMP,
+                        seenBy: []
+                    });
+                    setInputMessage('');
+
+                    // Clear typing indicator
+                    if (typingTimeoutRef.current) {
+                        clearTimeout(typingTimeoutRef.current);
+                    }
+                    chatTypingRef.child(myConnectionId.current).remove();
+                }
+            };
+
+            const handleTyping = () => {
+                if (hasUsername) {
+                    // Set typing indicator
+                    chatTypingRef.child(myConnectionId.current).set({
+                        username,
+                        timestamp: Date.now()
+                    });
+
+                    // Clear previous timeout
+                    if (typingTimeoutRef.current) {
+                        clearTimeout(typingTimeoutRef.current);
+                    }
+
+                    // Remove typing indicator after 3 seconds
+                    typingTimeoutRef.current = setTimeout(() => {
+                        chatTypingRef.child(myConnectionId.current).remove();
+                    }, 3000);
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="chat-modal-overlay" onClick={onClose}>
+                    <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="chat-header">
+                            <div>
+                                <h2 className="text-xl font-bold">💬 Anonymous Chat</h2>
+                                <p className="text-xs opacity-90">Connect with other trip members</p>
+                            </div>
+                            <button className="chat-close-btn" onClick={onClose}>×</button>
+                        </div>
+
+                        {!hasUsername ? (
+                            <div className="chat-username-prompt" style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center'}}>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-2">Welcome! 👋</h3>
+                                <p className="text-gray-600 mb-4">Enter your name to start chatting</p>
+                                <form onSubmit={handleSetUsername}>
+                                    <input
+                                        type="text"
+                                        className="chat-username-input"
+                                        placeholder="Your name..."
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        maxLength={20}
+                                        autoFocus
+                                    />
+                                    <button type="submit" className="chat-username-btn">
+                                        Start Chatting
+                                    </button>
+                                </form>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="chat-online-users">
+                                    <div className="font-semibold">Online ({onlineUsers.length})</div>
+                                    <div className="chat-online-list">
+                                        {onlineUsers.map((user, idx) => (
+                                            <div key={idx} className="chat-online-user">
+                                                <div className="chat-online-dot"></div>
+                                                <span>{user}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="chat-messages">
+                                    {messages.map((msg, idx) => {
+                                        if (msg.type === 'system') {
+                                            return (
+                                                <div key={idx} className="text-center text-xs text-gray-500 my-2">
+                                                    {msg.text}
+                                                </div>
+                                            );
+                                        }
+
+                                        const isOwn = msg.username === username;
+                                        return (
+                                            <div key={idx} className={`chat-message ${isOwn ? 'own' : ''}`}>
+                                                {!isOwn && (
+                                                    <div className="chat-message-header">
+                                                        <span className="font-semibold">{msg.username}</span>
+                                                        <span className="text-xs">
+                                                            {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="chat-message-bubble">
+                                                    {msg.text}
+                                                </div>
+                                                {isOwn && msg.seenBy && msg.seenBy.length > 0 && (
+                                                    <div className="chat-seen-indicator" style={{justifyContent: 'flex-end'}}>
+                                                        <span>Seen by</span>
+                                                        <div className="chat-seen-avatars">
+                                                            {msg.seenBy.slice(0, 3).map((user, i) => (
+                                                                <div key={i} className="chat-seen-avatar" title={user}>
+                                                                    {user.charAt(0).toUpperCase()}
+                                                                </div>
+                                                            ))}
+                                                            {msg.seenBy.length > 3 && (
+                                                                <div className="chat-seen-avatar" title={`+${msg.seenBy.length - 3} more`}>
+                                                                    +{msg.seenBy.length - 3}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {isOwn && (
+                                                    <div className="chat-message-header">
+                                                        <span className="text-xs">
+                                                            {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    <div ref={messagesEndRef} />
+                                </div>
+
+                                <div className="chat-typing-indicator">
+                                    {Object.values(typingUsers).filter(u => u.username !== username).length > 0 && (
+                                        <span>
+                                            {Object.values(typingUsers).filter(u => u.username !== username).map(u => u.username).join(', ')}
+                                            {' '}{Object.values(typingUsers).filter(u => u.username !== username).length === 1 ? 'is' : 'are'} typing...
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="chat-input-area">
+                                    <form onSubmit={handleSendMessage}>
+                                        <div className="chat-input-wrapper">
+                                            <input
+                                                type="text"
+                                                className="chat-input"
+                                                placeholder="Type a message..."
+                                                value={inputMessage}
+                                                onChange={(e) => {
+                                                    setInputMessage(e.target.value);
+                                                    handleTyping();
+                                                }}
+                                                autoFocus
+                                            />
+                                            <button type="submit" className="chat-send-btn" disabled={!inputMessage.trim()}>
+                                                ➤
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [activeTab, setActiveTab] = useState('travelers');
             const [travelers, setTravelers] = useState([]);
@@ -113,6 +662,8 @@
             });
             const [loading, setLoading] = useState(true);
             const [isOffline, setIsOffline] = useState(false);
+            const [chatOpen, setChatOpen] = useState(false);
+            const [unreadCount, setUnreadCount] = useState(0);
 
             useEffect(() => {
                 // Monitor connection state
@@ -1171,40 +1722,60 @@
             };
 
             return (
-                <div className="min-h-screen bg-gray-100 p-2 md:p-8">
-                    <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl p-4 md:p-6">
-                        {isOffline && (
-                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 mb-4 text-sm">
-                                ⚠️ You're offline. Changes will sync when connection is restored.
+                <>
+                    <div className="min-h-screen bg-gray-100 p-2 md:p-8">
+                        <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl p-4 md:p-6">
+                            {isOffline && (
+                                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 mb-4 text-sm">
+                                    ⚠️ You're offline. Changes will sync when connection is restored.
+                                </div>
+                            )}
+
+                            <TripSettingsPanel />
+
+                            <div className="flex justify-between items-center mb-4 no-print">
+                                <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">🌍 Trip Manager</h1>
+                                <div className="flex space-x-2">
+                                    <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-700">
+                                        📥 Export CSV
+                                    </button>
+                                    <button onClick={shareToWhatsApp} className="bg-green-500 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-600">
+                                        💬 Share
+                                    </button>
+                                </div>
                             </div>
-                        )}
-                        
-                        <TripSettingsPanel />
 
-                        <div className="flex justify-between items-center mb-4 no-print">
-                            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">🌍 Trip Manager</h1>
-                            <div className="flex space-x-2">
-                                <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-700">
-                                    📥 Export CSV
-                                </button>
-                                <button onClick={shareToWhatsApp} className="bg-green-500 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-green-600">
-                                    💬 Share
-                                </button>
+                            <div className="flex border-b mb-6 no-print overflow-x-auto">
+                                <TabButton name="travelers" label="👥 Travelers" />
+                                <TabButton name="expenses" label="💸 Expenses" />
+                                <TabButton name="analytics" label="📊 Analytics" />
+                                <TabButton name="splits" label="⚖️ Settlements" />
                             </div>
-                        </div>
 
-                        <div className="flex border-b mb-6 no-print overflow-x-auto">
-                            <TabButton name="travelers" label="👥 Travelers" />
-                            <TabButton name="expenses" label="💸 Expenses" />
-                            <TabButton name="analytics" label="📊 Analytics" />
-                            <TabButton name="splits" label="⚖️ Settlements" />
-                        </div>
-
-                        <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
-                            <Content />
+                            <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
+                                <Content />
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    {/* Floating Chat Button */}
+                    <button
+                        className={`chat-float-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
+                        onClick={() => {
+                            setChatOpen(true);
+                            setUnreadCount(0);
+                        }}
+                        title="Open Chat"
+                    >
+                        💬
+                        {unreadCount > 0 && (
+                            <span className="chat-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                        )}
+                    </button>
+
+                    {/* Chat Modal */}
+                    <ChatModal isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+                </>
             );
         };
 
