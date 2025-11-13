@@ -390,7 +390,7 @@
             const messagesEndRef = useRef(null);
             const typingTimeoutRef = useRef(null);
             const userPresenceRef = useRef(null);
-            const myConnectionId = useRef(Date.now() + Math.random());
+            const myConnectionId = useRef(`${Date.now()}_${Math.floor(Math.random() * 10000)}`);
 
             // Firebase refs
             const chatMessagesRef = db.ref('chatMessages');
